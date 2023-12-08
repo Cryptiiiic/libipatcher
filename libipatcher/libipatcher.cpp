@@ -205,6 +205,7 @@ string libipatcher::getFirmwareJson(std::string device, std::string buildnum, st
         }
         return getRemoteFile(url);
     } catch (...) {
+        fprintf(stderr, "Failed to connect to api.m1sta.xyz, retrying with localhost!\n");
         //retrying with local wikiproxy server
     }
 
@@ -217,6 +218,7 @@ string libipatcher::getFirmwareJson(std::string device, std::string buildnum, st
         }
         return getRemoteFile(url);
     } catch (...) {
+        fprintf(stderr, "Failed to connect to localhost:8888, retrying with ipsw.me!\n");
         //retrying with api server
     }
     try {
@@ -224,7 +226,8 @@ string libipatcher::getFirmwareJson(std::string device, std::string buildnum, st
         url += device + "/" + buildnum;
         return getRemoteFile(url);
     } catch (...) {
-        reterror("failed to get FirmwareJson from Server");
+        fprintf(stderr, "Failed to connect to ipsw.me!\n");
+        reterror("failed to get FirmwareJson from api.m1sta.xyz, localhost, and ipsw.me servers!");
     }
     
     

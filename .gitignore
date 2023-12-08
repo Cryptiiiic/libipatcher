@@ -35,3 +35,7 @@ INSTALL
 libipatcher.pc
 .irecovery
 .vscode
+.idea
+*.tar
+*.zst
+dep_root
