@@ -153,8 +153,9 @@ string libipatcher::getRemoteFile(std::string url){
     
     curl_easy_setopt(mc, CURLOPT_URL, url.c_str());
     curl_easy_setopt(mc, CURLOPT_USERAGENT, "libipatcher/" VERSION_COMMIT_COUNT " APIKEY=" VERSION_COMMIT_SHA);
-    curl_easy_setopt(mc, CURLOPT_CONNECTTIMEOUT, 30);
     curl_easy_setopt(mc, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(mc, CURLOPT_CONNECTTIMEOUT, 300);
+    curl_easy_setopt(mc, CURLOPT_TIMEOUT, 60);
     
     curl_easy_setopt(mc, CURLOPT_WRITEFUNCTION, &helpers::downloadFunction);
     curl_easy_setopt(mc, CURLOPT_WRITEDATA, &buf);
@@ -177,7 +178,8 @@ std::string libipatcher::getRemoteDestination(std::string url){
     
     curl_easy_setopt(mc, CURLOPT_URL, url.c_str());
     curl_easy_setopt(mc, CURLOPT_USERAGENT, "libipatcher/" VERSION_COMMIT_COUNT " APIKEY=" VERSION_COMMIT_SHA);
-    curl_easy_setopt(mc, CURLOPT_CONNECTTIMEOUT, 30);
+    curl_easy_setopt(mc, CURLOPT_CONNECTTIMEOUT, 300);
+    curl_easy_setopt(mc, CURLOPT_TIMEOUT, 60);
     curl_easy_setopt(mc, CURLOPT_NOBODY, 1);
     
     assure(curl_easy_perform(mc) == CURLE_OK);
