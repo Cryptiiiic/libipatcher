@@ -152,6 +152,7 @@ string libipatcher::getRemoteFile(std::string url){
     assure(mc);
     
     curl_easy_setopt(mc, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(mc, CURLOPT_SSL_VERIFYPEER, 0);
     curl_easy_setopt(mc, CURLOPT_USERAGENT, "libipatcher/" VERSION_COMMIT_COUNT " APIKEY=" VERSION_COMMIT_SHA);
     curl_easy_setopt(mc, CURLOPT_FOLLOWLOCATION, 1);
     curl_easy_setopt(mc, CURLOPT_CONNECTTIMEOUT, 300);
@@ -177,6 +178,7 @@ std::string libipatcher::getRemoteDestination(std::string url){
     assure(mc);
     
     curl_easy_setopt(mc, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(mc, CURLOPT_SSL_VERIFYPEER, 0);
     curl_easy_setopt(mc, CURLOPT_USERAGENT, "libipatcher/" VERSION_COMMIT_COUNT " APIKEY=" VERSION_COMMIT_SHA);
     curl_easy_setopt(mc, CURLOPT_CONNECTTIMEOUT, 300);
     curl_easy_setopt(mc, CURLOPT_TIMEOUT, 60);
@@ -197,7 +199,7 @@ std::string libipatcher::getRemoteDestination(std::string url){
 
 string libipatcher::getFirmwareJson(std::string device, std::string buildnum, std::string boardconfig){
     try {
-        string url("api.m1sta.xyz/wikiproxy/");
+        string url("https://api.m1sta.xyz/wikiproxy/");
         if(boardconfig == "") {
             url += device + "/" + buildnum;
         } else {
