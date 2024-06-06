@@ -1,0 +1,2 @@
+#!/usr/bin/env zsh
+for file in $(find dep_root/lib/pkgconfig -name "*.pc"); do export pkg=$(realpath $(dirname $(realpath "${file}"))/../../); pkg=$(echo $pkg | sed 's/\//\\\//g'); sed -i "s/^prefix=.*/prefix=${pkg}/g" $file; done

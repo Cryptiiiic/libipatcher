@@ -15,12 +15,19 @@
 
 #include <libgeneral/macros.h>
 
+#define WITH_IBOOT64PATCHER 1
+#define WITH_IBOOT32PATCHER 1
 #ifdef WITH_IBOOT64PATCHER
+
+#include <libpatchfinder/machopatchfinder64.hpp>
 #include <libpatchfinder/ibootpatchfinder/ibootpatchfinder64.hpp>
+#include <libpatchfinder/kernelpatchfinder/kernelpatchfinder64.hpp>
 #endif //WITH_IBOOT64PATCHER
 
 #ifdef WITH_IBOOT32PATCHER
+#include <libpatchfinder/machopatchfinder32.hpp>
 #include <libpatchfinder/ibootpatchfinder/ibootpatchfinder32.hpp>
+#include <libpatchfinder/kernelpatchfinder/kernelpatchfinder32.hpp>
 #endif //WITH_IBOOT32PATCHER
 
 #ifdef HAVE_IMG4TOOL
@@ -34,6 +41,16 @@
 #ifdef HAVE_LIBFRAGMENTZIP
 #include <libfragmentzip/libfragmentzip.h>
 #endif //HAVE_LIBFRAGMENTZIP
+
+#define addpatch(pp) do {\
+    auto p = pp; \
+    patches.insert(patches.end(), p.begin(), p.end()); \
+} while (0)
+
+#define addloc(pp) do {\
+    patches.push_back({pp,nullptr,0}); \
+} while (0)
+
 
 extern "C" {
 #include "jssy.h"
@@ -55,8 +72,8 @@ extern "C" {
 void *memmem(const void *haystack_start, size_t haystack_len, const void *needle_start, size_t needle_len){
     const unsigned char *haystack = (const unsigned char *)haystack_start;
     const unsigned char *needle = (const unsigned char *)needle_start;
-    const unsigned char *h = NULL;
-    const unsigned char *n = NULL;
+    const unsigned char *h = nullptr;
+    const unsigned char *n = nullptr;
     size_t x = needle_len;
 
     /* The first occurrence of the empty string is deemed to occur at
@@ -68,7 +85,7 @@ void *memmem(const void *haystack_start, size_t haystack_len, const void *needle
     /* Sanity check, otherwise the loop might search through the whole
         memory.  */
     if (haystack_len < needle_len) {
-        return NULL;
+        return nullptr;
     }
 
     for (; *haystack && haystack_len--; haystack++) {
@@ -92,7 +109,7 @@ void *memmem(const void *haystack_start, size_t haystack_len, const void *needle
                 return (void *)haystack;
         }
     }
-    return NULL;
+    return nullptr;
 }
 #endif
 
@@ -172,7 +189,8 @@ int iBoot32Patch(char *deciboot, size_t decibootSize, void *bootargs) noexcept;
 #endif
 
 #ifdef WITH_IBOOT64PATCHER
-int iBoot64Patch(char *deciboot, size_t decibootSize, void *bootargs) noexcept;
+int kernel64Patch(char *decKernel, size_t decKernelSize, void *args) noexcept;
+int iBoot64Patch(char *deciboot, size_t decibootSize, void *args) noexcept;
 #endif //WITH_IBOOT64PATCHER
 
 
@@ -219,7 +237,7 @@ string libipatcher::getRemoteFile(std::string url){
 }
 
 std::string libipatcher::getRemoteDestination(std::string url){
-  char* location = NULL; //don't free me manually
+  char* location = nullptr; //don't free me manually
   string buf;
   uint64_t curlcode = 0;
   CURL *mc = curl_easy_init();
@@ -341,8 +359,8 @@ string libipatcher::getDeviceJson(std::string device){
 
 #ifdef HAVE_LIBFRAGMENTZIP
 std::string libipatcher::getFirmwareJsonFromZip(std::string device, std::string buildnum, std::string zipURL, uint32_t cpid){
-    fragmentzip_t *fz = NULL;
-    char *outBuf = NULL;
+    fragmentzip_t *fz = nullptr;
+    char *outBuf = nullptr;
     cleanup([&]{
         safeFree(outBuf);
         safeFreeCustom(fz, fragmentzip_close);
@@ -362,8 +380,8 @@ std::string libipatcher::getFirmwareJsonFromZip(std::string device, std::string 
     {
         int err = 0;
         std::string filePath = "firmware/" + device + "/";
-        if ((err = fragmentzip_download_to_memory(fz, (filePath + cpid_str + buildnum).c_str(), &outBuf, &outBufSize, NULL))) {
-            err = fragmentzip_download_to_memory(fz, (filePath + buildnum).c_str(), &outBuf, &outBufSize, NULL);
+        if ((err = fragmentzip_download_to_memory(fz, (filePath + cpid_str + buildnum).c_str(), &outBuf, &outBufSize, nullptr))) {
+            err = fragmentzip_download_to_memory(fz, (filePath + buildnum).c_str(), &outBuf, &outBufSize, nullptr);
         }
         retassure(!err, "Failed to get firmware json from zip with err=%d",err);
     }
@@ -372,8 +390,8 @@ std::string libipatcher::getFirmwareJsonFromZip(std::string device, std::string 
 }
 
 string libipatcher::getDeviceJsonFromZip(std::string device, std::string zipURL){
-    fragmentzip_t *fz = NULL;
-    char *outBuf = NULL;
+    fragmentzip_t *fz = nullptr;
+    char *outBuf = nullptr;
     cleanup([&]{
         safeFree(outBuf);
         safeFreeCustom(fz, fragmentzip_close);
@@ -385,7 +403,7 @@ string libipatcher::getDeviceJsonFromZip(std::string device, std::string zipURL)
     {
         int err = 0;
         std::string filePath = "firmware/" + device;
-        retassure(!(err = fragmentzip_download_to_memory(fz, filePath.c_str(), &outBuf, &outBufSize, NULL)), "Failed to get firmware json from zip with err=%d",err);
+        retassure(!(err = fragmentzip_download_to_memory(fz, filePath.c_str(), &outBuf, &outBufSize, nullptr)), "Failed to get firmware json from zip with err=%d",err);
     }
 
     return {outBuf,outBuf+outBufSize};
@@ -395,9 +413,9 @@ string libipatcher::getDeviceJsonFromZip(std::string device, std::string zipURL)
 
 
 fw_key getFirmwareKeyForComparator(std::string device, std::string buildnum, std::function<bool(const jssytok_t *e)> comparator, uint32_t cpid, std::string boardconfig, std::string zipURL){
-    jssytok_t* tokens = NULL;
-    unsigned int * tkey = NULL;
-    unsigned int * tiv = NULL;
+    jssytok_t* tokens = nullptr;
+    unsigned int * tkey = nullptr;
+    unsigned int * tiv = nullptr;
     cleanup([&]{
         safeFree(tiv);
         safeFree(tkey);
@@ -412,16 +430,16 @@ fw_key getFirmwareKeyForComparator(std::string device, std::string buildnum, std
     string json = getFirmwareJson(device, buildnum, cpid, boardconfig);
 #endif //HAVE_LIBFRAGMENTZIP
 
-    retassure((tokensCnt = jssy_parse(json.c_str(), json.size(), NULL, 0)) > 0, "failed to parse json");
+    retassure((tokensCnt = jssy_parse(json.c_str(), json.size(), nullptr, 0)) > 0, "failed to parse json");
     assure(tokens = (jssytok_t*)malloc(sizeof(jssytok_t)*tokensCnt));
     assure(jssy_parse(json.c_str(), json.size(), tokens, tokensCnt * sizeof(jssytok_t)) == tokensCnt);
 
     jssytok_t *keys = jssy_dictGetValueForKey(tokens, "keys");
     assure(keys);
 
-    jssytok_t *iv = NULL;
-    jssytok_t *key = NULL;
-    jssytok_t *path = NULL;
+    jssytok_t *iv = nullptr;
+    jssytok_t *key = nullptr;
+    jssytok_t *path = nullptr;
 
     jssytok_t *tmp = keys->subval;
     for (size_t i=0; i<keys->size; tmp=tmp->next, i++) {
@@ -483,10 +501,10 @@ fw_key libipatcher::getFirmwareKeyForPath(std::string device, std::string buildn
 
 #ifdef WITH_IBOOT32PATCHER
 pair<char*,size_t>libipatcher::patchfile32(const char *ibss, size_t ibssSize, const fw_key &keys, string findstr, void *param, function<int(char *, size_t, void*)> patchfunc){
-    char *patched = NULL;
-    const char *key_iv = NULL;
-    const char *key_key = NULL;
-    const char *usedCompression = NULL;
+    char *patched = nullptr;
+    const char *key_iv = nullptr;
+    const char *key_key = nullptr;
+    const char *usedCompression = nullptr;
 
     //if one single byte isn't \x00 then set the iv
     for (int i=0; i<sizeof(keys.iv); i++) {
@@ -527,11 +545,11 @@ pair<char*,size_t>libipatcher::patchfile32(const char *ibss, size_t ibssSize, co
 
 #ifdef WITH_IBOOT64PATCHER
 std::pair<char*,size_t> libipatcher::patchfile64(const char *ibss, size_t ibssSize, const fw_key &keys, std::string findstr, void *param, std::function<int(char *, size_t, void *)> patchfunc){
-  char *patched = NULL;
-  const char *key_iv = NULL;
-  const char *key_key = NULL;
-  const char *usedCompression = NULL;
-  img4tool::ASN1DERElement hypervisor{{img4tool::ASN1DERElement::TagNULL,img4tool::ASN1DERElement::Primitive,img4tool::ASN1DERElement::Universal},NULL,0};
+  char *patched = nullptr;
+  const char *key_iv = nullptr;
+  const char *key_key = nullptr;
+  const char *usedCompression = nullptr;
+  img4tool::ASN1DERElement hypervisor{{img4tool::ASN1DERElement::TagNULL,img4tool::ASN1DERElement::Primitive,img4tool::ASN1DERElement::Universal},nullptr,0};
 
   //if one single byte isn't \x00 then set the iv
   for (int i=0; i<sizeof(key_iv); i++) {
@@ -571,7 +589,7 @@ std::pair<char*,size_t> libipatcher::patchfile64(const char *ibss, size_t ibssSi
 #warning BUG WORKAROUND recompressing images with bvx2 makes them not boot for some reason
     if (usedCompression && strcmp(usedCompression, "bvx2") == 0) {
       warning("BUG WORKAROUND recompressing images with bvx2 makes them not boot for some reason. Skipping compression");
-      usedCompression = NULL;
+      usedCompression = nullptr;
     }
   }
 
@@ -587,7 +605,7 @@ std::pair<char*,size_t> libipatcher::patchfile64(const char *ibss, size_t ibssSi
 
 #ifdef WITH_IBOOT32PATCHER
 int iBoot32Patch(char *deciboot, size_t decibootSize, void *bootargs_) noexcept{
-    patchfinder::ibootpatchfinder32 *ibpf = NULL;
+    patchfinder::ibootpatchfinder32 *ibpf = nullptr;
     cleanup([&]{
         if (ibpf) {
             delete ibpf;
@@ -657,17 +675,124 @@ int iBoot32Patch(char *deciboot, size_t decibootSize, void *bootargs_) noexcept{
 #endif
 
 #ifdef WITH_IBOOT64PATCHER
-int iBoot64Patch(char *deciboot, size_t decibootSize, void *bootargs_) noexcept{
-  patchfinder::ibootpatchfinder64 *ibpf = NULL;
+
+int kernel64Patch(char *decKernel, size_t decKernelSize, void *args) noexcept{
+  patchfinder::kernelpatchfinder *kpf = nullptr;
+  cleanup([&]{
+    if(kpf) {
+      delete kpf;
+    }
+  });
+  const char *custom_seed = (const char*)args;
+  std::vector<patchfinder::patch> patches;
+  printf("%s: Starting...\n", __FUNCTION__);
+  try {
+    kpf = patchfinder::kernelpatchfinder64::make_kernelpatchfinder64(decKernel,decKernelSize);
+  } catch (...) {
+    printf("%s: Failed initializing kernel!\n", __FUNCTION__);
+    return -(__LINE__);
+  }
+  printf("%s: Initialized kernel!\n", __FUNCTION__);
+  std::string version = kpf->get_xnu_kernel_version_number_string();
+  if(!version.empty()) {
+    uint32_t vers = atoi(version.c_str());
+    if(vers > 8700) {
+      try {
+        if(custom_seed && strlen(custom_seed) >= 32) {
+          uint8_t *seed = nullptr;
+          if(memcmp(custom_seed, "0x", 2) == 0) {
+            if(strlen(custom_seed) - 2 < 32) {
+              printf("%s: Failed getting cryptexseed patch: %s!\n", __FUNCTION__, !custom_seed ? "0x11111111111111111111111111111111" : custom_seed);
+              return -__LINE__;
+            }
+            custom_seed+=2;
+          }
+          size_t cnt;
+          uint32_t *tmp = nullptr;
+          hexToInts(custom_seed, &tmp, &cnt);
+          if(cnt != 16) {
+            printf("%s: Failed getting cryptexseed patch: %s! (%s)\n", __FUNCTION__, !custom_seed ? "0x11111111111111111111111111111111" : custom_seed);
+            return -__LINE__;
+          }
+          seed = (uint8_t *)tmp;
+//          uint8_t tmp[50];
+//          memcpy(&tmp[0] + 0, custom_seed + 0, 16); *(uint8_t *)(&tmp[0] + 16) = '\0';
+//          memcpy(&tmp[0] + 17, custom_seed + 16, 16); *(uint8_t *)(&tmp[0] + 34) = '\0';
+//          *(uint64_t *)(seed + 0) = strtol((const char *)&tmp[0], nullptr, 16);
+//          *(uint64_t *)(seed + 8) = strtol((const char *)&tmp[0] + 17, nullptr, 16);
+          kpf->get_img4_nonce_manager_generate_seed_patch(seed);
+          addpatch(kpf->get_img4_nonce_manager_generate_seed_patch(seed));
+        } else {
+          addpatch(kpf->get_img4_nonce_manager_generate_seed_patch(nullptr));
+        }
+      } catch (tihmstar::exception &e) {
+        printf("%s: Failed getting cryptexseed patch: %s! (%s)\n", __FUNCTION__, !custom_seed ? "0x11111111111111111111111111111111" : custom_seed, e.what());
+        return -__LINE__;
+      }
+    }
+    printf("%s: Added cryptexseed patch!\n", __FUNCTION__);
+  }
+  for (const auto& p2 : patches) {
+    printf("%s: Applying patch=0x%016llx: ", __FUNCTION__, p2._location);
+    for (int i=0; i<p2._patchSize; i++) {
+      printf("%02x",((uint8_t*)p2._patch)[i]);
+    }
+    if (p2._patchSize == 4) {
+      printf(" 0x%08x",*(uint32_t*)p2._patch);
+    } else if (p2._patchSize == 2) {
+      printf(" 0x%04x",*(uint16_t*)p2._patch);
+    }
+    printf("\n");
+    uint64_t base = 0;
+    uint64_t off = 0;
+    auto *krnl = ((patchfinder::kernelpatchfinder64 *)kpf);
+    auto *macho = ((patchfinder::kernelpatchfinder64 *)kpf);
+    bool is_fat = false;
+    if(macho->get_fat().first) {
+      decKernel = (char *)macho->get_fat().first;
+      decKernelSize = macho->get_fat().second;
+      is_fat = true;
+    }
+    auto vmem = krnl->get_vmem();
+    auto segs = vmem->getSegments();
+    for (const auto &seg: segs) {
+      if(vmem->seg(p2._location).isInRange(seg.vaddr)) {
+        base = seg.vaddr;
+        break;
+      }
+    }
+    if(!base) {
+      fprintf(stderr, "%s: Failed to apply patch=0x%016llx, base is zero!\n", __FUNCTION__, p2._location);
+      continue;
+    }
+    auto fileoff_map = macho->get_fileoff_map();
+    if(fileoff_map.empty()) {
+      fprintf(stderr, "%s: Failed to apply patch=0x%016llx, fileoff map is empty!\n", __FUNCTION__, p2._location);
+      continue;
+    }
+    auto fileoff = macho->get_fileoff_map()[base];
+    if(!fileoff) {
+      fprintf(stderr, "%s: Failed to apply patch=0x%016llx, fileoff entry is zero!\n", __FUNCTION__, p2._location);
+      continue;
+    }
+    off = p2._location - base + fileoff;
+    memcpy(&decKernel[off], p2._patch, p2._patchSize);
+  }
+  printf("%s: Patches applied!\n", __FUNCTION__);
+  return 0;
+}
+
+int iBoot64Patch(char *deciboot, size_t decibootSize, void *args) noexcept {
+  patchfinder::ibootpatchfinder *ibpf = nullptr;
   cleanup([&]{
       if (ibpf) {
           delete ibpf;
       }
   });
-  const char *bootargs = (const char*)bootargs_;
+  const char *bootargs = (const char*)args;
   std::vector<patchfinder::patch> patches;
 
-  printf("%s: Staring iBoot64Patch!\n", __FUNCTION__);
+  printf("%s: Starting...\n", __FUNCTION__);
   try {
       ibpf = patchfinder::ibootpatchfinder64::make_ibootpatchfinder64(deciboot,decibootSize);
   } catch (...) {
@@ -753,12 +878,12 @@ pair<char*,size_t>libipatcher::patchiBSS(const char *ibss, size_t ibssSize, cons
        //
     }
     if (is64Bit) {
-        return patchfile64(ibss, ibssSize, keys, "iBoot", NULL, iBoot64Patch);
+        return patchfile64(ibss, ibssSize, keys, "iBoot", nullptr, iBoot64Patch);
     }
 #endif //WITH_IBOOT64PATCHER
 
 #ifdef WITH_IBOOT32PATCHER
-    return patchfile32(ibss, ibssSize, keys, "iBoot", NULL, iBoot32Patch);
+    return patchfile32(ibss, ibssSize, keys, "iBoot", nullptr, iBoot32Patch);
 #endif
     reterror("No compatible backend available!");
 }
@@ -778,14 +903,37 @@ pair<char*,size_t>libipatcher::patchiBEC(const char *ibec, size_t ibecSize, cons
     }
 
     if (is64Bit) {
-        return patchfile64(ibec, ibecSize, keys, "iBoot", (void*)(bootargs.size() ? bootargs.c_str() : NULL), iBoot64Patch);
+        return patchfile64(ibec, ibecSize, keys, "iBoot", (void*)(bootargs.size() ? bootargs.c_str() : nullptr), iBoot64Patch);
     }
 #endif //WITH_IBOOT64PATCHER
 
 #ifdef WITH_IBOOT32PATCHER
-    return patchfile32(ibec, ibecSize, keys, "iBoot", (void*)(bootargs.size() ? bootargs.c_str() : NULL), iBoot32Patch);
+    return patchfile32(ibec, ibecSize, keys, "iBoot", (void*)(bootargs.size() ? bootargs.c_str() : nullptr), iBoot32Patch);
 #endif
     reterror("No compatible backend available!");
+}
+
+pair<char*,size_t>libipatcher::patchKernel(const char *kernel, size_t kernelSize, const libipatcher::fw_key &keys, std::string custom_seed){
+#ifdef WITH_IBOOT64PATCHER
+  bool is64Bit = false;
+  try {
+    img4tool::ASN1DERElement im4p(kernel,kernelSize);
+    if (img4tool::isIM4P(im4p)) {
+      is64Bit = true;
+    }
+  } catch (...) {
+    //
+  }
+
+  if (is64Bit) {
+    return patchfile64(kernel, kernelSize, keys, "KernelCache", (void*)(custom_seed.size() ? custom_seed.c_str() : nullptr), kernel64Patch);
+  }
+#endif //WITH_IBOOT64PATCHER
+
+//#ifdef WITH_IBOOT32PATCHER
+//  return patchfile32(kernel, kernelSize, keys, "iBoot", (void*)(bootargs.size() ? bootargs.c_str() : nullptr), iBoot32Patch);
+//#endif
+  reterror("No compatible backend available!");
 }
 
 std::pair<char*,size_t>libipatcher::patchCustom(const char *file, size_t fileSize, const fw_key &keys, std::function<int(char *, size_t, void *)> patchfunc, void *parameter, std::string findDecStr){
@@ -812,12 +960,12 @@ std::pair<char*,size_t>libipatcher::patchCustom(const char *file, size_t fileSiz
 }
 
 std::pair<char*,size_t> libipatcher::decryptFile(const char *fbuf, size_t fbufSize, const fw_key &keys){
-    return patchCustom(fbuf, fbufSize, keys, NULL, NULL, {});
+    return patchCustom(fbuf, fbufSize, keys, nullptr, nullptr, {});
 }
 
 std::pair<char*,size_t>libipatcher::packIM4PToIMG4(const void *im4p, size_t im4pSize, const void *im4m, size_t im4mSize){
 #ifdef HAVE_IMG4TOOL
-  char *out = NULL;
+  char *out = nullptr;
   img4tool::ASN1DERElement eim4p{im4p,im4pSize};
   img4tool::ASN1DERElement eim4m{im4m,im4mSize};
 
@@ -836,7 +984,7 @@ std::pair<char*,size_t>libipatcher::packIM4PToIMG4(const void *im4p, size_t im4p
 
 
 pwnBundle libipatcher::getPwnBundleForDevice(std::string device, std::string buildnum, uint32_t cpid, std::string boardconfig, std::string zipURL){
-    jssytok_t* tokens = NULL;
+    jssytok_t* tokens = nullptr;
     cleanup([&]{
         safeFree(tokens);
     });
@@ -872,7 +1020,7 @@ pwnBundle libipatcher::getPwnBundleForDevice(std::string device, std::string bui
     string json = getDeviceJson(device);
 #endif //HAVE_LIBFRAGMENTZIP
 
-    assure((tokensCnt = jssy_parse(json.c_str(), json.size(), NULL, 0)) > 0);
+    assure((tokensCnt = jssy_parse(json.c_str(), json.size(), nullptr, 0)) > 0);
     assure(tokens = (jssytok_t*)malloc(sizeof(jssytok_t)*tokensCnt));
     assure(jssy_parse(json.c_str(), json.size(), tokens, tokensCnt * sizeof(jssytok_t)) == tokensCnt);
 
