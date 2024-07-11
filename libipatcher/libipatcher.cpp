@@ -305,7 +305,12 @@ string libipatcher::getFirmwareJson(std::string device, std::string buildnum, ui
         try {return getRemoteFile(url + cpid_str + buildnum);} catch (...) {}
       }
       try {
-        return getRemoteFile(url + buildnum);
+        if(boardconfig == "") {
+          url += device + "/" + buildnum;
+        } else {
+          url += device + "/" + boardconfig + "/" + buildnum;
+        }
+        return getRemoteFile(url);
       } catch (...) {
 #ifdef FIRMWARE_JSON_URL_START
         fprintf(stderr, "Failed to connect to localhost, retrying with %s!\n", FIRMWARE_JSON_URL_START);
@@ -745,37 +750,7 @@ int kernel64Patch(char *decKernel, size_t decKernelSize, void *args) noexcept{
     printf("\n");
     uint64_t base = 0;
     uint64_t off = 0;
-    auto *krnl = ((patchfinder::kernelpatchfinder64 *)kpf);
-    auto *macho = ((patchfinder::kernelpatchfinder64 *)kpf);
-    bool is_fat = false;
-    if(macho->get_fat().first) {
-      decKernel = (char *)macho->get_fat().first;
-      decKernelSize = macho->get_fat().second;
-      is_fat = true;
-    }
-    auto vmem = krnl->get_vmem();
-    auto segs = vmem->getSegments();
-    for (const auto &seg: segs) {
-      if(vmem->seg(p2._location).isInRange(seg.vaddr)) {
-        base = seg.vaddr;
-        break;
-      }
-    }
-    if(!base) {
-      fprintf(stderr, "%s: Failed to apply patch=0x%016llx, base is zero!\n", __FUNCTION__, p2._location);
-      continue;
-    }
-    auto fileoff_map = macho->get_fileoff_map();
-    if(fileoff_map.empty()) {
-      fprintf(stderr, "%s: Failed to apply patch=0x%016llx, fileoff map is empty!\n", __FUNCTION__, p2._location);
-      continue;
-    }
-    auto fileoff = macho->get_fileoff_map()[base];
-    if(!fileoff) {
-      fprintf(stderr, "%s: Failed to apply patch=0x%016llx, fileoff entry is zero!\n", __FUNCTION__, p2._location);
-      continue;
-    }
-    off = p2._location - base + fileoff;
+    off = (uint64_t)((const char *)kpf->memoryForLoc(p2._location) - decKernel);
     memcpy(&decKernel[off], p2._patch, p2._patchSize);
   }
   printf("%s: Patches applied!\n", __FUNCTION__);
