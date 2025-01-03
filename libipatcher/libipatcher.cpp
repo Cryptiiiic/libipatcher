@@ -218,6 +218,7 @@ string libipatcher::getRemoteFile(std::string url){
     assure(mc);
 
     curl_easy_setopt(mc, CURLOPT_URL, url.c_str());
+//    curl_easy_setopt(mc, CURLOPT_VERBOSE, 1);
     curl_easy_setopt(mc, CURLOPT_SSL_VERIFYPEER, 0);
     curl_easy_setopt(mc, CURLOPT_USERAGENT, "libipatcher/" VERSION_COMMIT_COUNT " APIKEY=" VERSION_COMMIT_SHA);
     curl_easy_setopt(mc, CURLOPT_FOLLOWLOCATION, 1);
@@ -666,11 +667,11 @@ int iBoot32Patch(char *deciboot, size_t decibootSize, void *bootargs_) noexcept{
     for (auto p : patches) {
         uint64_t off = (uint64_t)(p._location - ibpf->find_base());
         printf("%s: Applying patch=%p : ",__FUNCTION__,(void*)p._location);
-        for (int i=0; i<p._patchSize; i++) {
-            printf("%02x",((uint8_t*)p._patch)[i]);
+        for (int i=0; i<p.getPatchSize(); i++) {
+            printf("%02x",((uint8_t*)p.getPatch())[i]);
         }
         printf("\n");
-        memcpy(&deciboot[off], p._patch, p._patchSize);
+        memcpy(&deciboot[off], p.getPatch(), p.getPatchSize());
     }
 
     printf("%s: Patches applied!\n", __FUNCTION__);
@@ -737,21 +738,21 @@ int kernel64Patch(char *decKernel, size_t decKernelSize, void *args) noexcept{
     }
     printf("%s: Added cryptexseed patch!\n", __FUNCTION__);
   }
-  for (const auto& p2 : patches) {
+  for (auto p2 : patches) {
     printf("%s: Applying patch=0x%016llx: ", __FUNCTION__, p2._location);
-    for (int i=0; i<p2._patchSize; i++) {
-      printf("%02x",((uint8_t*)p2._patch)[i]);
+    for (int i=0; i<p2.getPatchSize(); i++) {
+      printf("%02x",((uint8_t*)p2.getPatch())[i]);
     }
-    if (p2._patchSize == 4) {
-      printf(" 0x%08x",*(uint32_t*)p2._patch);
-    } else if (p2._patchSize == 2) {
-      printf(" 0x%04x",*(uint16_t*)p2._patch);
+    if (p2.getPatchSize() == 4) {
+      printf(" 0x%08x",*(uint32_t*)p2.getPatch());
+    } else if (p2.getPatchSize() == 2) {
+      printf(" 0x%04x",*(uint16_t*)p2.getPatch());
     }
     printf("\n");
     uint64_t base = 0;
     uint64_t off = 0;
     off = (uint64_t)((const char *)kpf->memoryForLoc(p2._location) - decKernel);
-    memcpy(&decKernel[off], p2._patch, p2._patchSize);
+    memcpy(&decKernel[off], p2.getPatch(), p2.getPatchSize());
   }
   printf("%s: Patches applied!\n", __FUNCTION__);
   return 0;
@@ -829,11 +830,11 @@ int iBoot64Patch(char *deciboot, size_t decibootSize, void *args) noexcept {
   for (auto p : patches) {
     uint64_t off = (uint64_t)(p._location - ibpf->find_base());
     printf("%s: Applying patch=%p : ",__FUNCTION__,(void*)p._location);
-    for (int i=0; i<p._patchSize; i++) {
-      printf("%02x",((uint8_t*)p._patch)[i]);
+    for (int i=0; i<p.getPatchSize(); i++) {
+      printf("%02x",((uint8_t*)p.getPatch())[i]);
     }
     printf("\n");
-    memcpy(&deciboot[off], p._patch, p._patchSize);
+    memcpy(&deciboot[off], p.getPatch(), p.getPatchSize());
   }
   printf("%s: Patches applied!\n", __FUNCTION__);
 
